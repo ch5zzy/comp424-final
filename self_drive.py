@@ -1,3 +1,4 @@
+import time
 import RPi.GPIO as GPIO
 from gpiozero import Servo
 import cv2
@@ -9,7 +10,9 @@ GPIO.setmode(GPIO.BCM)
 
 # # Set up GPIO pin 14 as the throttle pin
 throttle_pin = 14
+throttle_on = False
 GPIO.setup(throttle_pin, GPIO.OUT)
+GPIO.output(throttle_pin, throttle_on)
 
 # # Set up GPIO pin 13 as the servo pin
 servo = Servo(13)
@@ -17,8 +20,17 @@ servo = Servo(13)
 def set_servo_turn_amt(value):
     servo.value = value
 
-def toggle_throttle(on=True):
-    GPIO.output(throttle_pin, on)
+def toggle_throttle(on=False, off=False):
+    if on:
+        GPIO.output(throttle_pin, on)
+        throttle_on = True
+    elif off:
+        GPIO.output(throttle_pin, off)
+        throttle_on = False
+    else:
+        GPIO.output(throttle_pin, not throttle_on)
+        throttle_on = not throttle_on
+
 
 def detect_edges(frame):
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
@@ -174,6 +186,8 @@ video = cv2.VideoCapture(0)
 video.set(cv2.CAP_PROP_FRAME_WIDTH,320)
 video.set(cv2.CAP_PROP_FRAME_HEIGHT,240)
 
+last_update = time.time()
+update_time = 0.5 # seconds
 while True:
     ret,frame = video.read()
     frame = cv2.flip(frame,-1)
@@ -188,8 +202,13 @@ while True:
     heading_image = display_heading_line(lane_lines_image,steering_angle)
 
     cv2.imshow("heading", heading_image)
+    
+    # Check if we should toggle the throttle
+    now = time.time()
+    if abs(now - last_update) >= update_time:
+        last_update = now
 
-    toggle_throttle()
+        toggle_throttle()
 
     # Adjust the wheel angle
     if steering_angle < 80:
