@@ -160,8 +160,33 @@ video = cv2.VideoCapture(0)
 video.set(cv2.CAP_PROP_FRAME_WIDTH,320)
 video.set(cv2.CAP_PROP_FRAME_HEIGHT,240)
 
+''' SETTING P AND D VALUES '''
+
+kp = 0.2    # change for testing purposes
+kd = kp * 0.1
+
+stop_timing = 0
+stop_state = 0
+
+''' PLOTTING DATA '''
+
+error_data = []
+steering_pwm_data = []
+throttle_pwm_data = []
+
+proportional_resp_data = []
+derivative_resp_data = []
+
+p_vals = []
+d_vals = []
+err_vals = []
+
+''' MAIN LOOP '''
+
 last_update = time.time()
+last_cycle = last_update
 update_time = 0.2 # seconds
+last_error = 0
 while True:
     ret,frame = video.read()
     frame = cv2.flip(frame,-1)
@@ -179,13 +204,47 @@ while True:
     if abs(now - last_update) >= update_time:
         last_update = now
         toggle_throttle()
-    # Adjust the wheel angle
-    if steering_angle < 80:
-        set_servo_turn_amt(-0.2)
-    elif steering_angle > 100:
-        set_servo_turn_amt(0.2)
-    else:
-        set_servo_turn_amt(0)
+
+    # OLD STEERING: Adjust the wheel angle
+    # if steering_angle < 80:
+    #     set_servo_turn_amt(-0.5)
+    # elif steering_angle > 100:
+    #     set_servo_turn_amt(0.5)
+    # else:
+    #     set_servo_turn_amt(0)
+
+    ''' CALCULATE DERIVATIVE FROM PD ALGORITHM '''
+    now = time.time()
+    dt = now - last_cycle
+    deviation = steering_angle - 90
+
+    error = -deviation
+    base_turn = 0
+    proportional = kp * error
+    derivative = kd * (error - last_error) / dt
+
+    error_data.append(error)
+    proportional_resp_data.append(proportional)
+    derivative_resp_data.append(derivative)
+
+    ''' FOR PLOTTING PURPOSES '''
+    p_vals.append(proportional)
+    d_vals.append(derivative)
+    err_vals.append(error)
+
+    ''' DETERMINE TURN AMOUNT (WITH PWM CONTROL) '''
+    turn_amt = base_turn + proportional + derivative
+
+    if turn_amt < -1:
+        turn_amt = -1
+    elif turn_amt > 1:
+        turn_amt = 1
+    print(f"Turn amt: {turn_amt}")
+    set_servo_turn_amt(turn_amt)
+
+    last_error = error
+    last_cycle = now
+
     key = cv2.waitKey(1)
     if key == 27:
         break
