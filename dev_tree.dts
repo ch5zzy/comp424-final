@@ -1,0 +1,15 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+    fragment@0 {
+        target-path="/";
+        __overlay__ {
+            comp424p2dev {
+                compatible = "comp424p2";
+                button-gpios = <&gpio 6 0 >;
+            };
+        };
+    };
+
+};
