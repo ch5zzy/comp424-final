@@ -124,6 +124,24 @@ def display_lines(frame, lines, line_color=(0, 255, 0), line_width=6): # line co
     line_image = cv2.addWeighted(frame, 0.8, line_image, 1, 1)  
     return line_image
 
+def check_for_stop_sign(frame):
+    # Range of red in HSV
+    left_lower_red = np.array([0,40,100], dtype="uint8")
+    left_upper_red = np.array([25,130,200], dtype="uint8")
+    right_lower_red = np.array([150, 40, 100], dtype="uint8")
+    right_upper_red = np.array([200, 130, 200], dtype="uint8")
+    # Right orientation for HSV function
+    left_lower_red = np.flip(left_lower_red)
+    left_upper_red = np.flip(left_upper_red)
+    right_lower_red = np.flip(right_lower_red)
+    right_upper_red = np.flip(right_upper_red)
+    # Create mask for 'red' detection
+    left_mask = cv2.inRange(frame, left_lower_red, left_upper_red)
+    right_mask = cv2.inRange(frame, right_lower_red, right_upper_red)
+    mask = cv2.bitwise_or(left_mask, right_mask)
+    num_red_px = cv2.countNonZero(mask)
+    return num_red_px
+
 def get_steering_angle(frame, lane_lines):
     height, width, _ = frame.shape
     if len(lane_lines) == 2: # if two lane lines are detected
@@ -163,7 +181,7 @@ video.set(cv2.CAP_PROP_FRAME_HEIGHT,240)
 ''' SETTING P AND D VALUES '''
 
 kp = 0.2    # change for testing purposes
-kd = kp * 0.1
+kd =  0.5
 
 stop_timing = 0
 stop_state = 0
@@ -185,11 +203,13 @@ err_vals = []
 
 last_update = time.time()
 last_cycle = last_update
-update_time = 0.2 # seconds
+update_time = 0.1 # seconds
+stop_time = update_time * 2
 last_error = 0
+stops = 0
 while True:
     ret,frame = video.read()
-    frame = cv2.flip(frame,-1)
+    frame = cv2.flip(frame,1)
     #Calling the functions
     edges = detect_edges(frame)
     roi = region_of_interest(edges)
@@ -201,10 +221,9 @@ while True:
     cv2.imshow("heading", heading_image)
     # Check if we should toggle the throttle
     now = time.time()
-    if abs(now - last_update) >= update_time:
+    if (throttle_on and abs(now - last_update) >= update_time) or (not throttle_on and (now -last_update) >= stop_time):
         last_update = now
         toggle_throttle()
-
     # OLD STEERING: Adjust the wheel angle
     # if steering_angle < 80:
     #     set_servo_turn_amt(-0.5)
@@ -212,39 +231,43 @@ while True:
     #     set_servo_turn_amt(0.5)
     # else:
     #     set_servo_turn_amt(0)
-
+    # Stop sign check
+    # if check_for_stop_sign(frame) >= 200:
+    #     toggle_throttle(False, True)
+    #     if stops > 0:
+    #         break
+    #     time.sleep(3)
+    #     toggle_throttle()
+    #     time.sleep(1)
+    #     stops += 1
+    #     print("stop light detected")
+    # else:
+    #     print("red value: ", check_for_stop_sign(frame))
     ''' CALCULATE DERIVATIVE FROM PD ALGORITHM '''
     now = time.time()
     dt = now - last_cycle
     deviation = steering_angle - 90
-
     error = -deviation
     base_turn = 0
     proportional = kp * error
     derivative = kd * (error - last_error) / dt
-
     error_data.append(error)
     proportional_resp_data.append(proportional)
     derivative_resp_data.append(derivative)
-
     ''' FOR PLOTTING PURPOSES '''
     p_vals.append(proportional)
     d_vals.append(derivative)
     err_vals.append(error)
-
     ''' DETERMINE TURN AMOUNT (WITH PWM CONTROL) '''
     turn_amt = base_turn + proportional + derivative
-
     if turn_amt < -1:
         turn_amt = -1
-    elif turn_amt > 1:
-        turn_amt = 1
+    elif turn_amt > 0.4:
+        turn_amt = 0.4
     print(f"Turn amt: {turn_amt}")
     set_servo_turn_amt(turn_amt)
-
     last_error = error
     last_cycle = now
-
     key = cv2.waitKey(1)
     if key == 27:
         break
