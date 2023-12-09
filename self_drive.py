@@ -46,9 +46,9 @@ def detect_edges(frame):
 
 def detect_stop_sign(frame):
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    lower_blue = np.array([0, 40, 60], dtype = "uint8")
-    upper_blue = np.array([20, 80, 100], dtype="uint8")
-    mask = cv2.inRange(hsv,lower_blue,upper_blue)
+    lower_red = np.array([0, 40, 60], dtype = "uint8")
+    upper_red = np.array([20, 80, 100], dtype="uint8")
+    mask = cv2.inRange(hsv,lower_red,upper_red)
     # detect stop sign
     num_red_px = cv2.countNonZero(mask)
     print("num_red_px: ", num_red_px)
