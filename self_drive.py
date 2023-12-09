@@ -36,12 +36,23 @@ def toggle_throttle(on=False, off=False):
 def detect_edges(frame):
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     lower_blue = np.array([90, 120, 0], dtype = "uint8")
-    upper_blue = np.array([150, 255, 255], dtype="uint8")
+    upper_blue = np.array([120, 255, 255], dtype="uint8")
     mask = cv2.inRange(hsv,lower_blue,upper_blue)
     # detect edges
     edges = cv2.Canny(mask, 50, 100) 
     cv2.imshow("edges",edges)
     return edges
+
+
+def detect_stop_sign(frame):
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    lower_blue = np.array([0, 40, 60], dtype = "uint8")
+    upper_blue = np.array([20, 80, 100], dtype="uint8")
+    mask = cv2.inRange(hsv,lower_blue,upper_blue)
+    # detect stop sign
+    num_red_px = cv2.countNonZero(mask)
+    print("num_red_px: ", num_red_px)
+    return num_red_px >= 30
 
 def region_of_interest(edges):
     height, width = edges.shape # extract the height and width of the edges frame
@@ -124,23 +135,6 @@ def display_lines(frame, lines, line_color=(0, 255, 0), line_width=6): # line co
     line_image = cv2.addWeighted(frame, 0.8, line_image, 1, 1)  
     return line_image
 
-def check_for_stop_sign(frame):
-    # Range of red in HSV
-    left_lower_red = np.array([0,40,100], dtype="uint8")
-    left_upper_red = np.array([25,130,200], dtype="uint8")
-    right_lower_red = np.array([150, 40, 100], dtype="uint8")
-    right_upper_red = np.array([200, 130, 200], dtype="uint8")
-    # Right orientation for HSV function
-    left_lower_red = np.flip(left_lower_red)
-    left_upper_red = np.flip(left_upper_red)
-    right_lower_red = np.flip(right_lower_red)
-    right_upper_red = np.flip(right_upper_red)
-    # Create mask for 'red' detection
-    left_mask = cv2.inRange(frame, left_lower_red, left_upper_red)
-    right_mask = cv2.inRange(frame, right_lower_red, right_upper_red)
-    mask = cv2.bitwise_or(left_mask, right_mask)
-    num_red_px = cv2.countNonZero(mask)
-    return num_red_px
 
 def get_steering_angle(frame, lane_lines):
     height, width, _ = frame.shape
@@ -203,10 +197,11 @@ err_vals = []
 
 last_update = time.time()
 last_cycle = last_update
-update_time = 0.1 # seconds
+update_time = 0.1# seconds
 stop_time = update_time * 2
 last_error = 0
 stops = 0
+last_stopped = -1
 while True:
     ret,frame = video.read()
     frame = cv2.flip(frame,1)
@@ -231,18 +226,7 @@ while True:
     #     set_servo_turn_amt(0.5)
     # else:
     #     set_servo_turn_amt(0)
-    # Stop sign check
-    # if check_for_stop_sign(frame) >= 200:
-    #     toggle_throttle(False, True)
-    #     if stops > 0:
-    #         break
-    #     time.sleep(3)
-    #     toggle_throttle()
-    #     time.sleep(1)
-    #     stops += 1
-    #     print("stop light detected")
-    # else:
-    #     print("red value: ", check_for_stop_sign(frame))
+
     ''' CALCULATE DERIVATIVE FROM PD ALGORITHM '''
     now = time.time()
     dt = now - last_cycle
@@ -254,6 +238,20 @@ while True:
     error_data.append(error)
     proportional_resp_data.append(proportional)
     derivative_resp_data.append(derivative)
+    #stop sign check
+    if detect_stop_sign(frame):
+        if (last_stopped == -1):
+            toggle_throttle(False, True)
+            #time.sleep(2)
+            print("STOP DETECTED STOP DETECTED STOP DETECTED STOP DETECTED ")
+            last_stopped = time.time()
+            while (time.time() - last_stopped < 3):
+                print("waiting") 
+        elif (time.time() - last_stopped >= 20):
+            toggle_throttle(False, True)
+            break
+        else:
+            print("not waiting")
     ''' FOR PLOTTING PURPOSES '''
     p_vals.append(proportional)
     d_vals.append(derivative)
@@ -262,8 +260,8 @@ while True:
     turn_amt = base_turn + proportional + derivative
     if turn_amt < -1:
         turn_amt = -1
-    elif turn_amt > 0.4:
-        turn_amt = 0.4
+    elif turn_amt > 0.5:
+        turn_amt = 0.5
     print(f"Turn amt: {turn_amt}")
     set_servo_turn_amt(turn_amt)
     last_error = error
